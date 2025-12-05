@@ -57,8 +57,8 @@ function calculateMaturityDate(startDate: Date, savingsType: string): Date | nul
   return maturityDate
 }
 
-// Tính lãi suất
-export function calculateInterest(
+// Tính lãi suất (helper function - không export)
+function calculateInterest(
   principal: number,
   interestRate: number,
   days: number
