@@ -1,0 +1,209 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  username      String         @unique
+  password_hash String
+  fullName      String
+  avatarUrl     String?
+  createdAt     DateTime       @default(now())
+  accounts      Account[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Account {
+  id                   String               @id @default(cuid())
+  userId               String
+  accountNumber        String               @unique
+  balance              Float                @default(0)
+  type                 String               @default("PAYMENT")
+  status               String               @default("ACTIVE")
+  createdAt            DateTime             @default(now())
+  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cards                Card[]
+  sentTransactions     Transaction[]        @relation("SentTransactions")
+  receivedTransactions Transaction[]        @relation("ReceivedTransactions")
+  savingsAccounts      SavingsAccount[]
+  billPayments         BillPayment[]
+  scheduledTransfers   ScheduledTransfer[]
+  transactionLimits    TransactionLimit[]
+
+  @@index([userId])
+  @@index([accountNumber])
+  @@map("accounts")
+}
+
+model Transaction {
+  id            String            @id @default(cuid())
+  fromAccountId String
+  toAccountId   String
+  amount        Float
+  message       String?
+  createdAt     DateTime          @default(now())
+  status        String    @default("SUCCESS")
+  fromAccount   Account           @relation("SentTransactions", fields: [fromAccountId], references: [id])
+  toAccount     Account           @relation("ReceivedTransactions", fields: [toAccountId], references: [id])
+
+  @@index([fromAccountId])
+  @@index([toAccountId])
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+model Card {
+  id         String   @id @default(cuid())
+  accountId  String
+  cardNumber String   @unique
+  expiryDate String
+  cvv        String
+  isFrozen   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  account    Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@map("cards")
+}
+
+// Tài khoản tiết kiệm
+model SavingsAccount {
+  id              String   @id @default(cuid())
+  accountId       String
+  savingsType     String   // "FLEXIBLE" | "FIXED_1M" | "FIXED_3M" | "FIXED_6M" | "FIXED_12M"
+  balance         Float    @default(0)
+  interestRate    Float    // Lãi suất % năm
+  startDate       DateTime @default(now())
+  maturityDate    DateTime? // Ngày đáo hạn (null nếu không kỳ hạn)
+  status          String   @default("ACTIVE") // "ACTIVE" | "MATURED" | "CLOSED"
+  autoRenew       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  account         Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([status])
+  @@map("savings_accounts")
+}
+
+// Nhà cung cấp dịch vụ
+model BillProvider {
+  id          String        @id @default(cuid())
+  name        String        // "EVN", "VNPT", "Viettel", "FPT"
+  category    String        // "ELECTRIC" | "WATER" | "INTERNET" | "PHONE" | "TV"
+  logo        String?
+  description String?
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  bills       BillPayment[]
+
+  @@map("bill_providers")
+}
+
+// Thanh toán hóa đơn
+model BillPayment {
+  id              String       @id @default(cuid())
+  accountId       String
+  providerId      String
+  customerCode    String       // Mã khách hàng
+  amount          Float
+  billMonth       String?      // "2024-01" format
+  description     String?
+  status          String       @default("PENDING") // "PENDING" | "SUCCESS" | "FAILED"
+  transactionId   String?      // Link to Transaction if paid
+  createdAt       DateTime     @default(now())
+  paidAt          DateTime?
+  account         Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  provider        BillProvider @relation(fields: [providerId], references: [id])
+
+  @@index([accountId])
+  @@index([providerId])
+  @@index([status])
+  @@map("bill_payments")
+}
+
+// Chuyển tiền định kỳ
+model ScheduledTransfer {
+  id              String   @id @default(cuid())
+  fromAccountId   String
+  toAccountNumber String
+  toAccountName   String   // Cache tên người nhận
+  amount          Float
+  frequency       String   // "DAILY" | "WEEKLY" | "MONTHLY"
+  startDate       DateTime
+  endDate         DateTime?
+  nextRunDate     DateTime
+  message         String?
+  status          String   @default("ACTIVE") // "ACTIVE" | "PAUSED" | "COMPLETED" | "CANCELLED"
+  lastRunAt       DateTime?
+  runCount        Int      @default(0)
+  createdAt       DateTime @default(now())
+  account         Account  @relation(fields: [fromAccountId], references: [id], onDelete: Cascade)
+
+  @@index([fromAccountId])
+  @@index([status])
+  @@index([nextRunDate])
+  @@map("scheduled_transfers")
+}
+
+// Thông báo
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // "TRANSACTION" | "BILL" | "SAVINGS" | "SECURITY" | "SYSTEM"
+  title     String
+  message   String
+  data      String?  // JSON string for additional data
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// Giới hạn giao dịch
+model TransactionLimit {
+  id              String   @id @default(cuid())
+  accountId       String
+  limitType       String   // "DAILY" | "MONTHLY"
+  transactionType String   // "TRANSFER" | "BILL" | "ALL"
+  maxAmount       Float
+  maxCount        Int
+  currentAmount   Float    @default(0)
+  currentCount    Int      @default(0)
+  resetAt         DateTime
+  createdAt       DateTime @default(now())
+  account         Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([resetAt])
+  @@map("transaction_limits")
+}
+
+// Phí giao dịch
+model Fee {
+  id              String   @id @default(cuid())
+  name            String
+  transactionType String   // "TRANSFER" | "BILL" | "WITHDRAWAL"
+  feeType         String   // "FIXED" | "PERCENTAGE"
+  amount          Float    // Số tiền cố định hoặc % phí
+  minFee          Float?   // Phí tối thiểu
+  maxFee          Float?   // Phí tối đa
+  minTransaction  Float?   // Giao dịch tối thiểu để áp dụng phí
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@map("fees")
+}
