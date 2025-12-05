@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose'
-import * as bcrypt from 'bcryptjs'
+// Thay thế bcryptjs bằng bcrypt-ts để hỗ trợ Edge Runtime (Vercel)
+import { compare, hash } from 'bcrypt-ts'
 import { cookies } from 'next/headers'
 import { prisma } from './prisma'
 
@@ -16,7 +17,7 @@ export interface SessionUser {
 
 // Hash password
 export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 10)
+  return hash(password, 10)
 }
 
 // Verify password
@@ -24,7 +25,7 @@ export async function verifyPassword(
   password: string,
   hashedPassword: string
 ): Promise<boolean> {
-  return bcrypt.compare(password, hashedPassword)
+  return compare(password, hashedPassword)
 }
 
 // Create JWT token
@@ -50,7 +51,7 @@ export async function verifyToken(token: string): Promise<SessionUser | null> {
 
 // Get session from cookie
 export async function getSession(): Promise<SessionUser | null> {
-  const cookieStore = await cookies()
+  const cookieStore = cookies()
   const token = cookieStore.get('session')?.value
 
   if (!token) {
@@ -62,7 +63,7 @@ export async function getSession(): Promise<SessionUser | null> {
 
 // Set session cookie
 export async function setSessionCookie(token: string) {
-  const cookieStore = await cookies()
+  const cookieStore = cookies()
   cookieStore.set('session', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -74,7 +75,7 @@ export async function setSessionCookie(token: string) {
 
 // Clear session cookie
 export async function clearSessionCookie() {
-  const cookieStore = await cookies()
+  const cookieStore = cookies()
   cookieStore.delete('session')
 }
 
