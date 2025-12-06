@@ -4,9 +4,21 @@ import { compare, hash } from 'bcrypt-ts'
 import { cookies } from 'next/headers'
 import { prisma } from './prisma'
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-secret-key'
-)
+// In production require a real JWT secret. Fail fast to avoid silent auth issues.
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET) {
+    throw new Error(
+      'Missing JWT_SECRET in production. Set the JWT_SECRET environment variable in your hosting provider.'
+    )
+  }
+  if (process.env.JWT_SECRET === 'your-secret-key') {
+    throw new Error(
+      'Default JWT_SECRET in use. Replace "your-secret-key" with a secure secret in production.'
+    )
+  }
+}
+
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'your-secret-key')
 
 export interface SessionUser {
   id: string
